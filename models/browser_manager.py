@@ -1,4 +1,5 @@
 import traceback
+import logging
 from threading import Thread
 from queue import Queue
 from playwright.sync_api import sync_playwright
@@ -10,10 +11,13 @@ class BrowserManager(QObject):
 
     def __init__(self):
         super().__init__()
+        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+        self.logger = logging.getLogger(__name__)
         self.browsers = {}  # {profile_name: (thread, exception_queue)}
         self.check_timers = {}  # {profile_name: QTimer}
 
     def start_browser(self, profile):
+        self.logger.info(f"Starting browser for profile: {profile.name}")
         exception_queue = Queue()
 
         def run_browser():
@@ -26,12 +30,15 @@ class BrowserManager(QObject):
                     page = context.new_page()
                     page.goto("https://browserleaks.com/javascript")
                     page.wait_for_timeout(-1)
+                self.logger.debug(f"Browser started for profile: {profile.name}")
             except Exception as e:
+                self.logger.error(f"Exception occurred for profile {profile.name}: {e}")
                 exception_queue.put(traceback.format_exc())
 
         thread = Thread(target=run_browser)
         thread.start()
         self.browsers[profile.name] = (thread, exception_queue)
+        self.logger.info(f"Browser thread started for profile: {profile.name}")
         self.start_exception_checker(profile.name)
 
     def _create_context_options(self, profile):
@@ -51,10 +58,13 @@ class BrowserManager(QObject):
 
     def stop_browser(self, profile_name):
         if profile_name in self.browsers:
-            # Implement browser stopping logic here
+            self.logger.info(f"Stopping browser for profile: {profile_name}")
             # self.browsers[profile_name][0].stop()
             del self.browsers[profile_name]
+            self.logger.debug(f"Browser stopped for profile: {profile_name}")
             self.stop_exception_checker(profile_name)
+        else:
+            self.logger.warning(f"Attempted to stop non-existent browser for profile: {profile_name}")
 
     def start_exception_checker(self, profile_name):
         timer = QTimer(self)
@@ -72,6 +82,7 @@ class BrowserManager(QObject):
             thread, exception_queue = self.browsers[profile_name]
             if not exception_queue.empty():
                 exception = exception_queue.get()
+                self.logger.error(f"Exception in browser thread for profile {profile_name}: {exception}")
                 self.exception_occurred.emit(profile_name, exception)
 
             if not thread.is_alive():
