@@ -1,26 +1,22 @@
-from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QListWidget, QLabel, QListWidgetItem
+from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QListWidget, \
+    QListWidgetItem, QMessageBox
 from PySide6.QtCore import Qt
 from .profile_dialog import ProfileDialog
-from models.profile import Profile
-from models.browser_manager import BrowserManager
+from .profile_widget import ProfileWidget
+from browser.browser_manager import BrowserManager
 from utils.config import save_profiles, load_profiles
-
-
-def on_exception(profile_name, exception):
-    print(f"Exception in browser thread for profile {profile_name}:")
-    print(exception)
-
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Anti-Detect Browser Manager")
         self.setGeometry(100, 100, 600, 400)
-        self.profiles = load_profiles()  # Load profiles from file
+        self.profiles = load_profiles()
         self.browser_manager = BrowserManager()
-        self.browser_manager.exception_occurred.connect(on_exception)
         self.init_ui()
-        self.update_profile_list()  # Update list with loaded profiles
+        self.connect_signals()
+        self.update_profile_list()
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
     def init_ui(self):
         central_widget = QWidget()
@@ -36,6 +32,10 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(add_profile_button)
 
         layout.addLayout(button_layout)
+
+    def connect_signals(self):
+        self.browser_manager.exception_occurred.connect(self.on_browser_exception)
+        self.browser_manager.status_changed.connect(self.on_browser_status_changed)
 
     def add_profile(self):
         dialog = ProfileDialog(self)
@@ -54,42 +54,18 @@ class MainWindow(QMainWindow):
             self.profile_list.addItem(item)
             self.profile_list.setItemWidget(item, custom_widget)
 
+    def closeEvent(self, event):
+        self.browser_manager.cleanup()
+        super().closeEvent(event)
 
-class ProfileWidget(QWidget):
-    def __init__(self, profile, browser_manager):
-        super().__init__()
-        self.profile = profile
-        self.browser_manager = browser_manager
+    def on_browser_exception(self, profile_name, exception_text):
+        QMessageBox.warning(self, "Browser Exception",
+                            f"An error occurred in the browser for profile {profile_name}:\n{exception_text}")
 
-        layout = QHBoxLayout(self)
-        layout.addWidget(QLabel(f"Profile: {profile.name}"))
-        self.toggle_button = QPushButton("Start")
-        self.toggle_button.clicked.connect(self.toggle_browser)
-        layout.addWidget(self.toggle_button)
-
-        self.status_label = QLabel("Stopped")
-        layout.addWidget(self.status_label)
-
-    def toggle_browser(self):
-        if self.profile.name in self.browser_manager.browsers:
-            # Browser is running, so stop it
-            self.browser_manager.stop_browser(self.profile.name)
-            self.toggle_button.setText("Start")
-            self.status_label.setText("Stopped")
-            self.status_label.setStyleSheet("color: red;")
-        else:
-            # Browser is not running, so start it
-            self.browser_manager.start_browser(self.profile)
-            self.toggle_button.setText("Stop")
-            self.status_label.setText("Running")
-            self.status_label.setStyleSheet("color: green;")
-
-    def update_status(self, is_running):
-        if is_running:
-            self.toggle_button.setText("Stop")
-            self.status_label.setText("Running")
-            self.status_label.setStyleSheet("color: green;")
-        else:
-            self.toggle_button.setText("Start")
-            self.status_label.setText("Stopped")
-            self.status_label.setStyleSheet("color: red;")
+    def on_browser_status_changed(self, profile_name, status):
+        for index in range(self.profile_list.count()):
+            item = self.profile_list.item(index)
+            widget = self.profile_list.itemWidget(item)
+            if isinstance(widget, ProfileWidget) and widget.profile.name == profile_name:
+                widget.update_status(status)
+                break
