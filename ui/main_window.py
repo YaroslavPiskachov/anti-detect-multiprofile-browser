@@ -1,6 +1,9 @@
 from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QListWidget, \
     QListWidgetItem, QMessageBox
 from PySide6.QtCore import Qt
+
+from browser.playwright_provider import PlaywrightProvider
+from browser.selenium_provider import SeleniumProvider
 from .profile_dialog import ProfileDialog
 from .profile_widget import ProfileWidget
 from browser.browser_manager import BrowserManager
@@ -12,7 +15,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Anti-Detect Browser Manager")
         self.setGeometry(100, 100, 600, 400)
         self.profiles = load_profiles()
-        self.browser_manager = BrowserManager()
+        self.browser_provider = SeleniumProvider()
+        self.browser_manager = BrowserManager(self.browser_provider)
         self.init_ui()
         self.connect_signals()
         self.update_profile_list()

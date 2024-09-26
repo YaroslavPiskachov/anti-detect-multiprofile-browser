@@ -1,17 +1,21 @@
 from PySide6.QtCore import QObject, Signal
 import logging
 from typing import Dict
+
+from .browser_provider import BrowserProvider
 from .browser_thread import BrowserThread
+from .playwright_provider import PlaywrightProvider
 
 
 class BrowserManager(QObject):
     exception_occurred = Signal(str, str)  # profile_name, exception_text
     status_changed = Signal(str, str)  # profile_name, status
 
-    def __init__(self):
+    def __init__(self, browser_provider: BrowserProvider):
         super().__init__()
         self._setup_logging()
         self.browsers: Dict[str, BrowserThread] = {}
+        self.browser_provider = browser_provider or PlaywrightProvider()
 
     def _setup_logging(self):
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -24,7 +28,7 @@ class BrowserManager(QObject):
             self.logger.warning(f"Browser already running for profile: {profile.name}")
             return
 
-        browser_thread = BrowserThread(profile)
+        browser_thread = BrowserThread(profile, self.browser_provider)
         self._setup_thread_connections(browser_thread)
         browser_thread.start()
 
